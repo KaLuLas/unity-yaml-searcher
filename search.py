@@ -6,19 +6,28 @@ import csv
 import time
 
 SYS_ENV_JSON_PATH = 'C:/ROGameFeature/sys_env.json'
+MOON_RES_PATH = 'MoonResPath'
 # 写入CSV文件
 output_file_path = 'result.csv'
 
-UI_EFFECT_PREFIX = 'fx_ui'
+EFFECT_PREFIX = 'fx_'
 PREFAB_FILE_SUFFIX = '.prefab'
-MOON_RES_PATH = 'MoonResPath'
+SCENE_FILE_SUFFIX = '.unity'
+META_FILE_SUFFIX = '.meta'
+
+# Effect prefab目录相对artres库路径
+EFFECT_PREFAB_RELATIVE_PATH = '/Resources/Effects/Prefabs/'
+# UI prefab目录相对artres库路径
 UI_PREFAB_RELATIVE_PATH = '/Resources/UI/Prefabs/'
-UI_EFFECT_RELATIVE_PATH = 'Effects/Prefabs/Creature/Ui/'
+# 场景目录相对artres库路径
+SCENE_RESOURCE_RELATIVE_PATH = '/Resources/Scenes/'
 
 # CSV文件表头
 headers = ['ResourceName', 'ResourcePath', 'Type', 'EffectName', 'EffectPath']
 # CSV文件内容
 rows = []
+# 特效prefab的guid(str)映射到特效prefab绝对路径
+guid_to_effect_path = {}
 
 def local_time_str(format:str=None):
     """
@@ -50,48 +59,82 @@ def load_and_filter_yaml(file_path):
     file_name = file_path[file_path.rfind('/')+1:]
     # 特效助手配置路径
     entries = doc.filter(('MonoBehaviour',), ('EffectPath',))
+    # entry.anchor is fileID
     for entry in entries:
         effect_path = entry.EffectPath
         effect_name = effect_path[effect_path.rfind('/')+1:]
         add_row_data(file_name, file_path, 'effect helper', effect_name, effect_path)
-        # print(f"[{file_path}][EFFECT HELPER]: {entry.EffectPath}")
+        print(f"[{file_path}][EFFECT HELPER]: {effect_path}")
 
     # 特效prefab直接放在UIprefab中
     entries = doc.filter(('PrefabInstance',))
     for entry in entries:
         modifications = entry.m_Modification['m_Modifications']
         for modification in modifications:
-            if modification['propertyPath'] != 'm_Name':
+            # 检测到prefab的guid是特效guid
+            prefab_guid = modification['target'].get('guid', '')
+            if prefab_guid == '':
                 continue
-            name = modification['value']
-            if str(name)[:5].lower() != UI_EFFECT_PREFIX:
-                continue
-            add_row_data(file_name, file_path, 'prefab instance', name, UI_EFFECT_RELATIVE_PATH + name)
-            # print(f"[{file_path}][PREFAB INSTANCE]: {name}")
+
+            if prefab_guid in guid_to_effect_path.keys():
+                effect_path = guid_to_effect_path[prefab_guid]
+                effect_name = effect_path[effect_path.rfind('/')+1:]
+                # 绝对路径调整为Effects开始的Resources相对路径
+                effect_path = effect_path[effect_path.find('Effects'):]
+                add_row_data(file_name, file_path, 'prefab instance', effect_name, effect_path)
+                print(f"[{file_path}][PREFAB INSTANCE]: {effect_path}")
+                # 不用检测当前prefabInstance的其他改动，都是引用同一个prefab
+                break
 
 
-def walk_through_directory(directory):
+def build_guid_to_effect_info(directory):
     """
-    递归遍历目录下的每一个prefab文件
-    :param directory: 根目录
+    建立特效prefab guid到特效prefab绝对路径的映射
+    :param directory: 特效prefab存放目录
     """
-    prefab_path_list = []
-    print(f'[{local_time_str()}] 对\'{directory}\'目录深度搜索搜索...')
+    effect_prefab_list = []
+    print(f'[{local_time_str()}] 于\'{directory}\'目录建立特效资源索引...')
     for root, _, files in os.walk(directory):
         for file in files:
             file_path = os.path.join(root, file).replace('\\', '/')
-            if not file_path.endswith(PREFAB_FILE_SUFFIX):
+            if file_path.endswith(META_FILE_SUFFIX):
                 continue
-            prefab_path_list.append(file_path)
+            effect_prefab_list.append(file_path)
+
+    pbar = tqdm(effect_prefab_list)
+    for effect_path in pbar:
+        meta_doc = UnityDocument.load_yaml(effect_path + META_FILE_SUFFIX)
+        guid = meta_doc.entry['guid']
+        guid_to_effect_path[guid] = effect_path
     
-    pbar = tqdm(prefab_path_list)
-    for prefab_path in pbar:
+    print(f'[{local_time_str()}] \'{directory}\'目录特效资源索引建立完毕')
+
+
+def walk_through_directory(directory, filter):
+    """
+    递归遍历目录下的每一个prefab文件
+    :param directory: 根目录
+    :param filter: 筛选文件后缀
+    """
+    path_list = []
+    print(f'[{local_time_str()}] 对\'{directory}\'目录深度搜索解析...')
+    for root, _, files in os.walk(directory):
+        for file in files:
+            file_path = os.path.join(root, file).replace('\\', '/')
+            if not file_path.endswith(filter):
+                continue
+            path_list.append(file_path)
+    
+    pbar = tqdm(path_list)
+    for path in pbar:
         try:
-            load_and_filter_yaml(prefab_path)
-            pbar.set_description_str(f'正在处理\'{prefab_path}\'')
+            pbar.set_description_str(f'正在处理\'{path}\'')
+            load_and_filter_yaml(path)
         except Exception as e:
-            print(f'[{prefab_path}] 解析YAML时发生错误')
+            print(f'[{path}] 解析YAML时发生错误')
             print(e)
+    
+    print(f'[{local_time_str()}] \'{directory}\'目录深度解析完毕')
 
 
 def save_result():
@@ -117,11 +160,13 @@ def main():
     sys_env = json.load(fp)
     if MOON_RES_PATH in sys_env.keys():
         artres_path = sys_env[MOON_RES_PATH]
-        walk_through_directory(artres_path + UI_PREFAB_RELATIVE_PATH)
+        build_guid_to_effect_info(artres_path + EFFECT_PREFAB_RELATIVE_PATH)
+        walk_through_directory(artres_path + UI_PREFAB_RELATIVE_PATH, PREFAB_FILE_SUFFIX)
+        walk_through_directory(artres_path + SCENE_RESOURCE_RELATIVE_PATH, SCENE_FILE_SUFFIX)
+    
     save_result()
 
 
 if __name__ == '__main__':
     # TODO 脚本参数传入
-    # TODO .unity特效查找
     main()
