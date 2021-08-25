@@ -1,9 +1,11 @@
 from unityparser import UnityDocument
+from effect_ref import EffectRefDict
 from tqdm import tqdm
 import json
 import os
 import csv
 import time
+import traceback
 
 SYS_ENV_JSON_PATH = 'C:/ROGameFeature/sys_env.json'
 MOON_RES_PATH = 'MoonResPath'
@@ -22,8 +24,11 @@ UI_PREFAB_RELATIVE_PATH = '/Resources/UI/Prefabs/'
 # 场景目录相对artres库路径
 SCENE_RESOURCE_RELATIVE_PATH = '/Resources/Scenes/'
 
+EFFECT_HELPER_KEY = 'effect_helper'
+PREFAB_INSTANCE_KEY = 'prefab_instance'
+
 # CSV文件表头
-headers = ['ResourceName', 'ResourcePath', 'Type', 'EffectName', 'EffectPath']
+headers = ['ResourceName', 'ResourcePath', 'EffectName', 'EffectPath', 'Type', 'RefCount']
 # CSV文件内容
 rows = []
 # 特效prefab的guid(str)映射到特效prefab绝对路径
@@ -41,7 +46,7 @@ def local_time_str(format:str=None):
 
 def add_row_data(resource_name, resource_path, type, effect_name, effect_path):
     """
-    往文件中写入一条记录
+    [弃用]往文件中写入一条记录
     :param resource_name: 引用特效资源名
     :param resource_path: 引用特效资源路径
     :param type: 资源类型
@@ -57,14 +62,15 @@ def load_and_filter_yaml(file_path):
     """
     doc = UnityDocument.load_yaml(file_path=file_path)
     file_name = file_path[file_path.rfind('/')+1:]
+    effect_ref_dict = EffectRefDict(file_name, file_path)
     # 特效助手配置路径
     entries = doc.filter(('MonoBehaviour',), ('EffectPath',))
     # entry.anchor is fileID
     for entry in entries:
-        effect_path = entry.EffectPath
-        effect_name = effect_path[effect_path.rfind('/')+1:]
-        add_row_data(file_name, file_path, 'effect helper', effect_name, effect_path)
-        print(f"[{file_path}][EFFECT HELPER]: {effect_path}")
+        # 特效助手配置的路径不带文件后缀
+        effect_path = entry.EffectPath + PREFAB_FILE_SUFFIX
+        effect_ref_dict.add_ref(effect_path, EFFECT_HELPER_KEY)
+        # print(f"[{file_path}][{EFFECT_HELPER_KEY}]: {effect_path}")
 
     # 特效prefab直接放在UIprefab中
     entries = doc.filter(('PrefabInstance',))
@@ -78,13 +84,16 @@ def load_and_filter_yaml(file_path):
 
             if prefab_guid in guid_to_effect_path.keys():
                 effect_path = guid_to_effect_path[prefab_guid]
-                effect_name = effect_path[effect_path.rfind('/')+1:]
                 # 绝对路径调整为Effects开始的Resources相对路径
                 effect_path = effect_path[effect_path.find('Effects'):]
-                add_row_data(file_name, file_path, 'prefab instance', effect_name, effect_path)
-                print(f"[{file_path}][PREFAB INSTANCE]: {effect_path}")
+                effect_ref_dict.add_ref(effect_path, PREFAB_INSTANCE_KEY)
+                # print(f"[{file_path}][{PREFAB_INSTANCE_KEY}]: {effect_path}")
                 # 不用检测当前prefabInstance的其他改动，都是引用同一个prefab
                 break
+
+    result_list = effect_ref_dict.get_ref_list()
+    for result in result_list:
+        rows.append(result)
 
 
 def build_guid_to_effect_info(directory):
@@ -132,7 +141,7 @@ def walk_through_directory(directory, filter):
             load_and_filter_yaml(path)
         except Exception as e:
             print(f'[{path}] 解析YAML时发生错误')
-            print(e)
+            print(traceback.format_exc())
     
     print(f'[{local_time_str()}] \'{directory}\'目录深度解析完毕')
 
@@ -162,7 +171,7 @@ def main():
         artres_path = sys_env[MOON_RES_PATH]
         build_guid_to_effect_info(artres_path + EFFECT_PREFAB_RELATIVE_PATH)
         walk_through_directory(artres_path + UI_PREFAB_RELATIVE_PATH, PREFAB_FILE_SUFFIX)
-        walk_through_directory(artres_path + SCENE_RESOURCE_RELATIVE_PATH, SCENE_FILE_SUFFIX)
+        # walk_through_directory(artres_path + SCENE_RESOURCE_RELATIVE_PATH, SCENE_FILE_SUFFIX)
     
     save_result()
 

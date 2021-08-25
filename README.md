@@ -20,3 +20,4 @@
    2. prefab instance：直接放置特效prefab
 4. EffectName：特效名称
 5. EffectPath：特效相对Resources文件夹目录
+6. RefCount：引用计数
