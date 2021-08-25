@@ -1,3 +1,4 @@
+from io import TextIOWrapper
 from unityparser import UnityDocument
 from effect_ref import EffectRefDict
 from tqdm import tqdm
@@ -9,8 +10,13 @@ import traceback
 
 SYS_ENV_JSON_PATH = 'C:/ROGameFeature/sys_env.json'
 MOON_RES_PATH = 'MoonResPath'
+
 # 写入CSV文件
 output_file_path = 'result.csv'
+# 文件句柄
+output_file:TextIOWrapper = None
+# csv写者
+output_csv_writer = None
 
 EFFECT_PREFIX = 'fx_'
 PREFAB_FILE_SUFFIX = '.prefab'
@@ -44,16 +50,28 @@ def local_time_str(format:str=None):
     return time.strftime(formatStr, time.localtime())
 
 
-def add_row_data(resource_name, resource_path, type, effect_name, effect_path):
+def create_table_header():
     """
-    [弃用]往文件中写入一条记录
-    :param resource_name: 引用特效资源名
-    :param resource_path: 引用特效资源路径
-    :param type: 资源类型
-    :param effect_name: 特效名
-    :param effect_path: 特效路径
+    创建写入文件，并添加表头
     """
-    rows.append([resource_name, resource_path, type, effect_name, effect_path])
+    global output_file_path
+    global output_file
+    global output_csv_writer
+    output_file_path = local_time_str('%Y%m%d%H%M%S') + '.csv'
+    output_file = open(output_file_path, 'a', newline='')
+    output_csv_writer = csv.writer(output_file)
+    output_csv_writer.writerow(headers)
+    output_file.flush()
+    print(f'[{local_time_str()}] 已创建输出文件\'{output_file_path}\'，开始写入...')
+
+
+def add_row_data(result:list):
+    """
+    往文件中写入一条记录
+    """
+    output_csv_writer.writerow(result)
+    output_file.flush()
+
 
 def load_and_filter_yaml(file_path):
     """
@@ -93,7 +111,7 @@ def load_and_filter_yaml(file_path):
 
     result_list = effect_ref_dict.get_ref_list()
     for result in result_list:
-        rows.append(result)
+        add_row_data(result)
 
 
 def build_guid_to_effect_info(directory):
@@ -167,13 +185,20 @@ def main():
 
     fp = open(SYS_ENV_JSON_PATH, 'r')
     sys_env = json.load(fp)
-    if MOON_RES_PATH in sys_env.keys():
-        artres_path = sys_env[MOON_RES_PATH]
-        build_guid_to_effect_info(artres_path + EFFECT_PREFAB_RELATIVE_PATH)
-        walk_through_directory(artres_path + UI_PREFAB_RELATIVE_PATH, PREFAB_FILE_SUFFIX)
-        # walk_through_directory(artres_path + SCENE_RESOURCE_RELATIVE_PATH, SCENE_FILE_SUFFIX)
+    fp.close()
+
+    if MOON_RES_PATH not in sys_env.keys():
+        print(f'[{local_time_str()}] 未找到artres库路径，退出')
+        return
+
+    artres_path = sys_env[MOON_RES_PATH]
+    build_guid_to_effect_info(artres_path + EFFECT_PREFAB_RELATIVE_PATH)
+    create_table_header() # 创建写入文件
+    walk_through_directory(artres_path + UI_PREFAB_RELATIVE_PATH, PREFAB_FILE_SUFFIX)
+    walk_through_directory(artres_path + SCENE_RESOURCE_RELATIVE_PATH, SCENE_FILE_SUFFIX)
     
-    save_result()
+    output_file.close()
+    print(f'[{local_time_str()}] 特效引用搜索结果输出到文件\'{output_file_path}\'')
 
 
 if __name__ == '__main__':
