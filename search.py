@@ -5,10 +5,10 @@ from tqdm import tqdm
 import json
 import os
 import csv
+import sys
 import time
 import traceback
 
-SYS_ENV_JSON_PATH = 'C:/ROGameFeature/sys_env.json'
 MOON_RES_PATH = 'MoonResPath'
 
 # 写入CSV文件
@@ -157,7 +157,7 @@ def walk_through_directory(directory, filter):
         try:
             pbar.set_description_str(f'正在处理\'{path}\'')
             load_and_filter_yaml(path)
-        except Exception as e:
+        except Exception:
             print(f'[{path}] 解析YAML时发生错误')
             print(traceback.format_exc())
     
@@ -166,7 +166,7 @@ def walk_through_directory(directory, filter):
 
 def save_result():
     """
-    将搜索结果写入到`OUTPUT_FILE_PATH`
+    [废弃] 将搜索结果写入到`OUTPUT_FILE_PATH`
     """
     write_success = False
     output_file_path = local_time_str('%Y%m%d%H%M%S') + '.csv'
@@ -180,16 +180,21 @@ def save_result():
     print(f'[{local_time_str()}] 特效引用搜索结果输出到文件\'{output_file_path}\'{result_str}')
 
 
-def main():
+def main(sys_env_json_path):
     print(f'[{local_time_str()}] 开始特效引用搜索...')
 
-    fp = open(SYS_ENV_JSON_PATH, 'r')
-    sys_env = json.load(fp)
-    fp.close()
+    try:
+        fp = open(sys_env_json_path, 'r')
+        sys_env = json.load(fp)
+        fp.close()
+    except Exception:
+        print(f'[{local_time_str()}] 读取\'{sys_env_json_path}\'配置文件失败，退出')
+        print(traceback.format_exc())
+        exit()
 
     if MOON_RES_PATH not in sys_env.keys():
         print(f'[{local_time_str()}] 未找到artres库路径，退出')
-        return
+        exit()
 
     artres_path = sys_env[MOON_RES_PATH]
     build_guid_to_effect_info(artres_path + EFFECT_PREFAB_RELATIVE_PATH)
@@ -202,5 +207,10 @@ def main():
 
 
 if __name__ == '__main__':
-    # TODO 脚本参数传入
-    main()
+    # TODO 文件名加入当前分支+提交id
+    # TODO 提取timeline.playable中的特效引用
+    if len(sys.argv) < 2:
+        print(f'[{local_time_str()}] 请指定sys_env.json绝对路径: python search.py <path>')
+        exit()
+
+    main(sys.argv[1])
