@@ -20,7 +20,7 @@ python search.py <sys_env.json绝对路径>
 
 #### 导出结果
 
-导出结果为csv格式文件，命名格式"\<time\>_\<branch\>__\<commit_id\>.csv"其中：
+导出结果为csv格式文件，命名格式"\<time\>-\<branch\>-\<commit_id\>.csv"其中：
 
 1. ResourceName：引用特效的资源名
 2. ResourcePath：引用特效资源的绝对路径
