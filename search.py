@@ -227,7 +227,6 @@ def main(sys_env_json_path):
 
 
 if __name__ == '__main__':
-    # TODO 提取timeline.playable中的特效引用
     if len(sys.argv) < 2:
         print(f'[{local_time_str()}] 请指定sys_env.json绝对路径: python search.py <path>')
         exit()

@@ -10,6 +10,11 @@
 - unityparser(2.0.0)
 - gitpython(3.1.18)
 
+### TODO
+
+- [ ] 抽象不同的提取方式
+- [ ] 提取timeline.playable中的特效引用
+
 ### 使用说明
 
 #### 执行脚本
