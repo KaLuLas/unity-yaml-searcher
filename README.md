@@ -8,6 +8,7 @@
 - python3(3.8.5)
 - tpdm(4.51.0)
 - unityparser(2.0.0)
+- gitpython(3.1.18)
 
 ### 使用说明
 

@@ -2,6 +2,7 @@ from io import TextIOWrapper
 from unityparser import UnityDocument
 from effect_ref import EffectRefDict
 from tqdm import tqdm
+from git import Repo
 import json
 import os
 import csv
@@ -50,14 +51,30 @@ def local_time_str(format:str=None):
     return time.strftime(formatStr, time.localtime())
 
 
-def create_table_header():
+def get_artres_branch_and_commit(artres_path):
+    """
+    获取artres库当前分支与提交ID
+    :param artres_path: artres库绝对路径
+    :return: 当前分支:str, 提交ID8位截断:str
+    """
+    try:
+        artres_repo = Repo.init(artres_path, False)
+        return str(artres_repo.active_branch), str(artres_repo.active_branch.commit)[:8]
+    except Exception:
+        print(f'[{local_time_str()}] \'{artres_path}\'路径下artres库初始化失败，退出')
+        print(traceback.format_exc())
+        exit()
+
+
+def create_table_header(filename):
     """
     创建写入文件，并添加表头
+    :param file_name: 写入文件名
     """
     global output_file_path
     global output_file
     global output_csv_writer
-    output_file_path = local_time_str('%Y%m%d%H%M%S') + '.csv'
+    output_file_path = filename
     output_file = open(output_file_path, 'a', newline='')
     output_csv_writer = csv.writer(output_file)
     output_csv_writer.writerow(headers)
@@ -197,8 +214,11 @@ def main(sys_env_json_path):
         exit()
 
     artres_path = sys_env[MOON_RES_PATH]
+    active_branch, commit_id = get_artres_branch_and_commit(artres_path)
+    output_filename = f'{local_time_str("%Y%m%d%H%M%S")}-{active_branch}-{commit_id}.csv'
+
     build_guid_to_effect_info(artres_path + EFFECT_PREFAB_RELATIVE_PATH)
-    create_table_header() # 创建写入文件
+    create_table_header(output_filename) # 创建写入文件
     walk_through_directory(artres_path + UI_PREFAB_RELATIVE_PATH, PREFAB_FILE_SUFFIX)
     walk_through_directory(artres_path + SCENE_RESOURCE_RELATIVE_PATH, SCENE_FILE_SUFFIX)
     
@@ -207,7 +227,6 @@ def main(sys_env_json_path):
 
 
 if __name__ == '__main__':
-    # TODO 文件名加入当前分支+提交id
     # TODO 提取timeline.playable中的特效引用
     if len(sys.argv) < 2:
         print(f'[{local_time_str()}] 请指定sys_env.json绝对路径: python search.py <path>')
