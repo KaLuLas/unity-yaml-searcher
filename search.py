@@ -1,9 +1,9 @@
 from io import TextIOWrapper
-from re import search
 from unityparser import UnityDocument
 from effect_ref import EffectRefDict
-from yaml_effect_searcher import PrefabYamlEffectSearcher, YamlEffectSearcher, HelperYamlEffectSearcher
-from utils import EFFECT_PREFIX, PREFAB_FILE_SUFFIX, SCENE_FILE_SUFFIX, META_FILE_SUFFIX, local_time_str
+from yaml_effect_searcher import *
+from utils import local_time_str
+from config import *
 from tqdm import tqdm
 from git import Repo
 import json
@@ -12,23 +12,15 @@ import csv
 import sys
 import traceback
 
-MOON_RES_PATH = 'MoonResPath'
-
 # 写入CSV文件
 output_file_path = 'result.csv'
 # 文件句柄
 output_file:TextIOWrapper = None
 # csv写者
 output_csv_writer = None
-helper_searcher:HelperYamlEffectSearcher = None
-prefab_searcher:PrefabYamlEffectSearcher = None
-
-# Effect prefab目录相对artres库路径
-EFFECT_PREFAB_RELATIVE_PATH = '/Resources/Effects/Prefabs/'
-# UI prefab目录相对artres库路径
-UI_PREFAB_RELATIVE_PATH = '/Resources/UI/Prefabs/'
-# 场景目录相对artres库路径
-SCENE_RESOURCE_RELATIVE_PATH = '/Resources/Scenes/'
+helper_searcher:HelperEffectYamlSearcher = None
+prefab_searcher:PrefabEffectYamlSearcher = None
+timeline_searcher:TimelineEffectYamlSearcher = None
 
 # CSV文件表头
 headers = ['ResourceName', 'ResourcePath', 'EffectName', 'EffectPath', 'Type', 'RefCount']
@@ -111,7 +103,8 @@ def walk_through_directory(directory, filter, searchers:list):
     pbar = tqdm(path_list)
     for path in pbar:
         try:
-            pbar.set_description_str(f'正在处理\'{path}\'')
+            # 显示正在处理的文件
+            # pbar.set_description_str(f'正在处理\'{path}\'')
             load_and_filter_yaml(path, searchers)
         except Exception:
             print(f'[{path}] 解析YAML时发生错误')
@@ -153,15 +146,21 @@ def main(sys_env_json_path):
         exit()
 
     artres_path = sys_env[MOON_RES_PATH]
+    config_path = sys_env[MOONCLIENT_CONFIG_PATH]
     active_branch, commit_id = get_artres_branch_and_commit(artres_path)
     output_filename = f'{local_time_str("%Y%m%d%H%M%S")}-{active_branch}-{commit_id}.csv'
 
-    helper_searcher = HelperYamlEffectSearcher()
-    prefab_searcher = PrefabYamlEffectSearcher().prepare(artres_path + EFFECT_PREFAB_RELATIVE_PATH)
+    helper_searcher = HelperEffectYamlSearcher()
+    prefab_searcher = PrefabEffectYamlSearcher().prepare(artres_path + EFFECT_PREFAB_RELATIVE_PATH)
+    timeline_searcher = TimelineEffectYamlSearcher().prepare(config_path + EFFECT_TABLE_RELATIVE_PATH)
 
     create_table_header(output_filename) # 创建写入文件
+    # 查询UIPrefab中对特效资源的引用
     walk_through_directory(artres_path + UI_PREFAB_RELATIVE_PATH, PREFAB_FILE_SUFFIX, [helper_searcher, prefab_searcher])
-    # walk_through_directory(artres_path + SCENE_RESOURCE_RELATIVE_PATH, SCENE_FILE_SUFFIX, [prefab_searcher, ])
+    # 查询Cutscene/Timeline中对特效资源的引用
+    walk_through_directory(artres_path + TIMELINE_RESOURCE_RELATIVE_PATH, TIMELINE_FILE_SUFFIX, [timeline_searcher, ])
+    # 查询场景资源中对特效资源的引用
+    walk_through_directory(artres_path + SCENE_RESOURCE_RELATIVE_PATH, SCENE_FILE_SUFFIX, [prefab_searcher, ])
     
     output_file.close()
     print(f'[{local_time_str()}] 特效引用搜索结果输出到文件\'{output_file_path}\'')

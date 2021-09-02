@@ -1,10 +1,5 @@
 import time
 
-EFFECT_PREFIX = 'fx_'
-PREFAB_FILE_SUFFIX = '.prefab'
-SCENE_FILE_SUFFIX = '.unity'
-META_FILE_SUFFIX = '.meta'
-
 def local_time_str(format:str=None):
     """
     日志用
